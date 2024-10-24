@@ -11,7 +11,6 @@ import javax.swing.DefaultListCellRenderer;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JLayeredPane;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
@@ -41,6 +40,7 @@ public class DynamicLookAndFeelExample {
 
             // ComboBox to change Look and Feel
             JComboBox<UIManager.LookAndFeelInfo> lafComboBox = new JComboBox<>(UIManager.getInstalledLookAndFeels());
+            
             lafComboBox.setRenderer(new DefaultListCellRenderer() {
                 @Override
                 public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
@@ -53,6 +53,7 @@ public class DynamicLookAndFeelExample {
             });
 
             JProgressBar demoProgBar = new JProgressBar(SwingConstants.VERTICAL);
+            
             demoProgBar.setMinimum(0);
             demoProgBar.setMaximum(100);
             demoProgBar.setValue(50);
