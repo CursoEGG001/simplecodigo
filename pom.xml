@@ -11,4 +11,12 @@
         <maven.compiler.target>23</maven.compiler.target>
         <exec.mainClass>net.test.local.simple.codigo.Simplecodigo</exec.mainClass>
     </properties>
+    <dependencies>
+        <dependency>
+            <groupId>com.formdev</groupId>
+            <artifactId>flatlaf</artifactId>
+            <version>3.5.2</version>
+        </dependency>
+    </dependencies>
+    
 </project>
