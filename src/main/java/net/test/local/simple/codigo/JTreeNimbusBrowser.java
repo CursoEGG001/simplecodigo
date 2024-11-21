@@ -18,16 +18,16 @@ import javax.swing.border.Border;
 
 public class JTreeNimbusBrowser {
 
-    private static Set<String> NIMBUS_PRIMARY_COLORS = new HashSet<>(Arrays.asList(
+    private static final Set<String> NIMBUS_PRIMARY_COLORS = new HashSet<>(Arrays.asList(
             "text", "control", "nimbusBase", "nimbusOrange", "nimbusGreen", "nimbusRed", "nimbusInfoBlue",
             "nimbusAlertYellow", "nimbusFocus", "nimbusSelectedText", "nimbusSelectionBackground",
             "nimbusDisabledText", "nimbusLightBackground", "info"));
-    private static Set<String> NIMBUS_SECONDARY_COLORS = new HashSet<>(Arrays.asList(
+    private static final Set<String> NIMBUS_SECONDARY_COLORS = new HashSet<>(Arrays.asList(
             "textForeground", "textBackground", "background",
             "nimbusBlueGrey", "nimbusBorder", "nimbusSelection", "infoText", "menuText", "menu", "scrollbar",
             "controlText", "controlHighlight", "controlLHighlight", "controlShadow", "controlDkShadow", "textHighlight",
             "textHighlightText", "textInactiveText", "desktop", "activeCaption", "inactiveCaption"));
-    private static String[] NIMBUS_COMPONENTS = new String[]{
+    private static final String[] NIMBUS_COMPONENTS = new String[]{
         "ArrowButton", "Button", "ToggleButton", "RadioButton", "CheckBox", "ColorChooser", "ComboBox",
         "\"ComboBox.scrollPane\"", "FileChooser", "InternalFrameTitlePane", "InternalFrame", "DesktopIcon",
         "DesktopPane", "Label", "List", "MenuBar", "MenuItem", "RadioButtonMenuItem", "CheckBoxMenuItem", "Menu",

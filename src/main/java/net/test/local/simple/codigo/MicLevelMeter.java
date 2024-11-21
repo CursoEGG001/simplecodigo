@@ -62,7 +62,7 @@ public class MicLevelMeter extends JFrame {
             micLine.open(format);
             micLine.start();
 
-            byte[] buffer = new byte[1024]; // Buffer for capturing audio data
+            byte[] buffer = new byte[4096]; // Buffer for capturing audio data
             int bytesRead;
 
             while (true) {

@@ -57,7 +57,7 @@ public class Simplecodigo {
             if (k != n) {
                 n++;
             } else {
-                System.out.print("\"" + entry.getValue() + "\"\n");
+                System.out.print("\n\"" + entry.getValue() + "\"\n");
                 k++;
                 n = 0;
             }

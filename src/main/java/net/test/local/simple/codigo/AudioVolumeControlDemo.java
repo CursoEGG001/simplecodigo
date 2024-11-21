@@ -85,6 +85,7 @@ public class AudioVolumeControlDemo {
 
             // Get the Master Gain control
             FloatControl gainControl = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
+
             float minGain = gainControl.getMinimum();
             float maxGain = gainControl.getMaximum();
 
@@ -99,6 +100,10 @@ public class AudioVolumeControlDemo {
 
             // Create a JSlider for volume control
             JSlider volumeSlider = new JSlider(JSlider.VERTICAL, SLIDER_MIN, SLIDER_MAX, SLIDER_MAX);
+            int defValue = (int) (((gainControl.getValue() - minGain) * SLIDER_MAX) / (maxGain - minGain));
+            System.out.println(defValue + " " + SLIDER_MAX);
+            volumeSlider.setValue(defValue);
+            valueLabel.setText(defValue + "%");
             volumeSlider.addChangeListener(e -> {
                 int value = volumeSlider.getValue();
                 float gain = minGain + (maxGain - minGain) * value / SLIDER_MAX;
@@ -139,7 +144,6 @@ public class AudioVolumeControlDemo {
             // Play audio
             clip.start();
 
-            // Wait for playback to finish (optional)
             while (clip.getFramePosition() != clip.getFrameLength()) {
                 valueLabel2.setText("Clip: " + clip.getFramePosition() + " de " + clip.getFrameLength());
             }
