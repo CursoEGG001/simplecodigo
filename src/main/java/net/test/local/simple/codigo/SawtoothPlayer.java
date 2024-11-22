@@ -47,12 +47,13 @@ public class SawtoothPlayer extends JFrame {
                 if (control instanceof FloatControl
                         && line.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
                     volumeControl = (FloatControl) control;
+                    volumeControl.setValue((volumeControl.getMaximum() - volumeControl.getMinimum()) * .40f + volumeControl.getMinimum());
                     break;
                 }
             }
 
             // Create a slider for volume control
-            JSlider volumeSlider = new JSlider(0, 100, 100);
+            JSlider volumeSlider = new JSlider(0, 100, 40);
             volumeSlider.setBorder(BorderFactory.createTitledBorder("Amplitud"));
             volumeSlider.addChangeListener((ChangeEvent e) -> {
                 volume = (float) volumeSlider.getValue() / 100f;
