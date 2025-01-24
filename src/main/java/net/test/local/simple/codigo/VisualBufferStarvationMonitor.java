@@ -25,7 +25,7 @@ import javax.swing.JPanel;
 public class VisualBufferStarvationMonitor {
 
     private static volatile boolean running = true;
-    private static final int BUFFER_SIZE = 1024;
+    private static final int BUFFER_SIZE = 4096;
     private static final int VIS_WIDTH = 960;
     private static final int VIS_HEIGHT = 400;
     private static final Color STARVATION_COLOR = new Color(255, 50, 50, 150);
@@ -99,7 +99,7 @@ public class VisualBufferStarvationMonitor {
             running = false;
 
         } catch (LineUnavailableException | InterruptedException e) {
-            e.printStackTrace();
+            System.err.println(e.getMessage());
         }
     }
 
