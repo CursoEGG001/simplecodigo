@@ -9,10 +9,7 @@ import java.awt.BorderLayout;
 import java.awt.Canvas;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.DisplayMode;
 import java.awt.Graphics2D;
-import java.awt.GraphicsDevice;
-import java.awt.GraphicsEnvironment;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.image.BufferStrategy;
@@ -42,6 +39,7 @@ import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
 
 public class OscilloscopeAnalyzer extends JFrame {
+
     private static final int BUFFER_SIZE = 2048;
     private static final int MAX_POINTS = 1024;
     private final LinkedList<Short> waveformBuffer;
@@ -51,8 +49,8 @@ public class OscilloscopeAnalyzer extends JFrame {
     private TargetDataLine micLine;
     private final ExecutorService audioExecutor;
     private volatile boolean running = true;
-    private Canvas canvas;
-    private BufferStrategy bufferStrategy;
+    private final Canvas canvas;
+    private final BufferStrategy bufferStrategy;
     private final ScheduledExecutorService renderExecutor;
     private final ConcurrentLinkedQueue<Short> audioQueue;
 
@@ -116,19 +114,16 @@ public class OscilloscopeAnalyzer extends JFrame {
     }
 
     private void startRenderLoop() {
-        // Get refresh rate of the default screen
-        GraphicsDevice gd = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-        DisplayMode dm = gd.getDisplayMode();
-        int refreshRate = dm.getRefreshRate();
-        if (refreshRate <= 0) refreshRate = 60; // Fallback to 60Hz if unable to detect
+        int targetFPS = 60; // Fixed target framerate
+        long periodMillis = 1000 / targetFPS; // Calculate frame period in milliseconds
 
-        // Schedule render updates at screen refresh rate
-        long periodNanos = (long)(1_000_000_000.0 / refreshRate);
-        renderExecutor.scheduleAtFixedRate(this::render, 0, periodNanos, TimeUnit.NANOSECONDS);
+        renderExecutor.scheduleAtFixedRate(this::render, 0, periodMillis, TimeUnit.MILLISECONDS);
     }
 
     private void render() {
-        if (!running || bufferStrategy == null) return;
+        if (!running || bufferStrategy == null) {
+            return;
+        }
 
         // Process any new audio data
         Short value;
@@ -145,7 +140,9 @@ public class OscilloscopeAnalyzer extends JFrame {
             g = (Graphics2D) bufferStrategy.getDrawGraphics();
             drawWaveform(g);
         } finally {
-            if (g != null) g.dispose();
+            if (g != null) {
+                g.dispose();
+            }
         }
 
         // Show the rendered frame
@@ -168,23 +165,34 @@ public class OscilloscopeAnalyzer extends JFrame {
 
         // Configure rendering quality
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setStroke(new BasicStroke(1.5f));
+        g.setStroke(new BasicStroke(1.25f));
 
-        // Draw grid
+        // Draw grid with voltage divisions
         drawGrid(g, width, height, centerY);
 
         // Draw waveform
         if (!waveformBuffer.isEmpty()) {
             g.setColor(Color.GREEN);
             double xScale = (double) width / (MAX_POINTS - 1);
-            double yScale = height * 0.45 / Short.MAX_VALUE;
+
+            // Calculate voltage scale (showing true bipolar swing)
+            // Scale to show ±1V range (normalized from 16-bit audio ±32768)
+            double vScale = (height / 2) * 0.8; // Use 80% of half height for ±1V range
 
             int prevX = 0;
-            int prevY = centerY - (int) (waveformBuffer.get(0) * yScale);
+            // Convert first sample to voltage representation
+            double normalizedVoltage = waveformBuffer.get(0) / (double) Short.MAX_VALUE;
+            int prevY = centerY - (int) (normalizedVoltage * vScale);
 
             for (int i = 1; i < waveformBuffer.size(); i++) {
                 int x = (int) (i * xScale);
-                int y = centerY - (int) (waveformBuffer.get(i) * yScale);
+
+                // Convert sample to voltage (-1.0 to +1.0 range)
+                normalizedVoltage = waveformBuffer.get(i) / (double) Short.MAX_VALUE;
+
+                // Scale to screen coordinates
+                int y = centerY - (int) (normalizedVoltage * vScale);
+
                 g.drawLine(prevX, prevY, x, y);
                 prevX = x;
                 prevY = y;
@@ -195,18 +203,54 @@ public class OscilloscopeAnalyzer extends JFrame {
     private void drawGrid(Graphics2D g, int width, int height, int centerY) {
         // Draw grid lines
         g.setColor(new Color(0, 50, 0));
-        int gridSpacingX = width / 16;
-        int gridSpacingY = height / 8;
 
-        for (int i = 0; i <= width; i += gridSpacingX) {
+        // Major divisions - 8 vertical (time) and 8 horizontal (voltage) divisions
+        int majorDivisionX = width / 8;
+        int majorDivisionY = height / 8;
+
+        // Draw major grid lines
+        for (int i = 0; i <= width; i += majorDivisionX) {
+            g.setStroke(new BasicStroke(1.0f));
             g.drawLine(i, 0, i, height);
+
+            // Add time/div markers
+            if (i > 0) {
+                // Calculate time per division (assuming 44.1kHz sample rate)
+                double timeMs = (i * MAX_POINTS * 1000.0) / (width * 44100.0);
+                g.drawString(String.format("%.1f ms", timeMs), i - 25, height - 5);
+            }
         }
-        for (int i = 0; i <= height; i += gridSpacingY) {
+
+        // Draw minor grid lines (subdivisions)
+        g.setColor(new Color(0, 30, 0));
+        g.setStroke(new BasicStroke(0.5f));
+        int minorDivision = majorDivisionX / 5; // 5 subdivisions per major division
+        for (int i = 0; i <= width; i += minorDivision) {
+            if (i % majorDivisionX != 0) { // Skip where major lines are
+                g.drawLine(i, 0, i, height);
+            }
+        }
+
+        // Horizontal voltage? divisions
+        g.setColor(new Color(0, 50, 0));
+        g.setStroke(new BasicStroke(1.0f));
+        for (int i = 0; i <= height; i += majorDivisionY) {
             g.drawLine(0, i, width, i);
         }
 
-        // Draw center line
+        // Minor horizontal divisions
+        g.setColor(new Color(0, 30, 0));
+        g.setStroke(new BasicStroke(0.5f));
+        minorDivision = majorDivisionY / 5;
+        for (int i = 0; i <= height; i += minorDivision) {
+            if (i % majorDivisionY != 0) {
+                g.drawLine(0, i, width, i);
+            }
+        }
+
+        // Draw center line (0V reference) slightly brighter
         g.setColor(new Color(0, 100, 0));
+        g.setStroke(new BasicStroke(1.5f));
         g.drawLine(0, centerY, width, centerY);
     }
 
@@ -228,7 +272,7 @@ public class OscilloscopeAnalyzer extends JFrame {
         try {
             String selectedMixerName = (String) inputLineComboBox.getSelectedItem();
             Mixer selectedMixer = null;
-            
+
             for (Mixer.Info mixerInfo : AudioSystem.getMixerInfo()) {
                 if (mixerInfo.getName().equals(selectedMixerName)) {
                     selectedMixer = AudioSystem.getMixer(mixerInfo);
@@ -240,7 +284,7 @@ public class OscilloscopeAnalyzer extends JFrame {
                 throw new LineUnavailableException("No mixer found");
             }
 
-            AudioFormat format = new AudioFormat(44100.0f, 16, 2, true, true);
+            AudioFormat format = new AudioFormat(44100.0f, 16, 2, true, false);
             DataLine.Info info = new DataLine.Info(TargetDataLine.class, format);
             micLine = (TargetDataLine) selectedMixer.getLine(info);
             micLine.open(format);
@@ -263,11 +307,19 @@ public class OscilloscopeAnalyzer extends JFrame {
             int bytesRead = micLine.read(buffer, 0, buffer.length);
             if (bytesRead > 0) {
                 short[] audioData = convertByteToShortArray(buffer, bytesRead);
-                
+
+                // Use left channel only or average both channels (optional)
+                short[] singleChannelData = new short[audioData.length / 2];
+                for (int i = 0; i < singleChannelData.length; i++) {
+//                  singleChannelData[i] = audioData[2 * i]; // Left channel only
+                    // Optionally average both:
+                    singleChannelData[i] = (short) ((audioData[2 * i] + audioData[2 * i + 1]) / 2);
+                }
+
                 // Update audio metrics
-                double rms = calculateRMSLevel(audioData);
-                double freq = estimateDominantFrequency(audioData);
-                
+                double rms = calculateRMSLevel(singleChannelData);
+                double freq = estimateDominantFrequency(singleChannelData);
+
                 // Update UI components on EDT
                 SwingUtilities.invokeLater(() -> {
                     volumeMeter.setValue((int) (rms * 100));
@@ -275,7 +327,7 @@ public class OscilloscopeAnalyzer extends JFrame {
                 });
 
                 // Add data to the queue for rendering
-                for (short value : audioData) {
+                for (short value : singleChannelData) {
                     audioQueue.offer(value);
                 }
             }
