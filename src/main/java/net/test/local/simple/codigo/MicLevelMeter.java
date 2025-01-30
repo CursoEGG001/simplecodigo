@@ -22,7 +22,7 @@ import javax.swing.SwingUtilities;
  */
 public class MicLevelMeter extends JFrame {
 
-    private JProgressBar levelMeter;
+    private final JProgressBar levelMeter;
     private TargetDataLine micLine;
 
     public MicLevelMeter() {
@@ -48,7 +48,7 @@ public class MicLevelMeter extends JFrame {
     private void captureMicrophoneLevel() {
         try {
             // Set audio format for microphone capture
-            AudioFormat format = new AudioFormat(44100.0f, 16, 1, true, true); // Mono, 16-bit, 44.1kHz
+            AudioFormat format = new AudioFormat(44100.0f, 16, 1, true, false); // Mono, 16-bit, 44.1kHz
             DataLine.Info info = new DataLine.Info(TargetDataLine.class, format);
 
             // Check if the system supports the microphone input
