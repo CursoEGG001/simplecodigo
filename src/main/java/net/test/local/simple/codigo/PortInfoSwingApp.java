@@ -9,16 +9,23 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.awt.event.ActionEvent;
+import java.util.ArrayList;
 import java.util.Hashtable;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.BooleanControl;
 import javax.sound.sampled.CompoundControl;
 import javax.sound.sampled.Control;
 import javax.sound.sampled.EnumControl;
 import javax.sound.sampled.FloatControl;
+import javax.sound.sampled.Line;
 import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.Mixer;
 import javax.sound.sampled.Port;
+import javax.sound.sampled.SourceDataLine;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -39,10 +46,33 @@ import javax.swing.event.ChangeEvent;
  */
 public class PortInfoSwingApp extends JFrame {
 
-    private JComboBox<Port.Info> portComboBox;
+    private JComboBox<PortWrapper> portComboBox;
     private final JTextArea controlTextArea;
     private final JButton refreshButton;
+    private final JButton playButton;
     private final JPanel controlsContainer;
+    private SourceDataLine line;
+    private volatile boolean isPlaying;
+
+    // Wrapper class to store Port.Info and its associated Mixer
+    private static class PortWrapper {
+
+        final Port.Info portInfo;
+        final Mixer mixer;
+        final boolean isOutput; // Now directly reflects portInfo.isSource()
+
+        PortWrapper(Port.Info portInfo, Mixer mixer) { // Removed isOutput parameter
+            this.portInfo = portInfo;
+            this.mixer = mixer;
+            this.isOutput = portInfo.isSource(); // Use built-in check
+        }
+
+        @Override
+        public String toString() {
+            return portInfo.getName() + " (" + mixer.getMixerInfo().getName() + ")"
+                    + (isOutput ? " [Output]" : " [Input]");
+        }
+    }
 
     public PortInfoSwingApp() {
         setTitle("Java Sound API Port Selector");
@@ -50,66 +80,177 @@ public class PortInfoSwingApp extends JFrame {
         setSize(400, 300);
         setLocationRelativeTo(null);
 
-        // Initialize components
         portComboBox = new JComboBox<>();
-        portComboBox.setEditable(true); // Make the combo box editable
         controlTextArea = new JTextArea(10, 30);
-        controlTextArea.setEditable(false); // Non-editable text area
+        controlTextArea.setEditable(false);
         refreshButton = new JButton("Refresh Ports");
+        playButton = new JButton("Play Test Tone");
         controlsContainer = new JPanel();
 
-        // Set up the layout
+        setupUI();
+        setupListeners();
+        populatePorts();
+    }
+
+    private void setupUI() {
         setLayout(new BorderLayout());
         JPanel topPanel = new JPanel();
         topPanel.add(new JLabel("Select Port:"));
         topPanel.add(portComboBox);
         topPanel.add(refreshButton);
+        topPanel.add(playButton);
 
         add(topPanel, BorderLayout.NORTH);
         add(new JScrollPane(controlTextArea), BorderLayout.CENTER);
+        add(controlsContainer, BorderLayout.SOUTH);
+    }
 
-        // Add action listener for combo box selection
-        portComboBox.addActionListener((ActionEvent e) -> {
-            Port.Info selectedPort = (Port.Info) portComboBox.getSelectedItem();
-            if (selectedPort != null) {
-                displayPortControls(selectedPort);
+    private void setupListeners() {
+        portComboBox.addActionListener(e -> {
+            PortWrapper wrapper = (PortWrapper) portComboBox.getSelectedItem();
+            if (wrapper != null) {
+                displayPortControls(wrapper);
+                updatePlayButtonState(wrapper);
             }
         });
 
-        // Add action listener for the refresh button
-        refreshButton.addActionListener((ActionEvent e) -> {
-            populatePorts();
+        playButton.addActionListener(e -> {
+            if (!isPlaying) {
+                startPlayback();
+                playButton.setText("Stop Test Tone");
+            } else {
+                stopPlayback();
+                playButton.setText("Play Test Tone");
+            }
         });
 
-        // Populate ports at startup
-        populatePorts();
+        refreshButton.addActionListener(e -> populatePorts());
     }
 
-    // Method to populate the combo box with available ports
     private void populatePorts() {
-        portComboBox.removeAllItems(); // Clear existing items
+        portComboBox.removeAllItems();
+        List<PortWrapper> ports = new ArrayList<>();
 
-        Port.Info[] portInfos = {
-            Port.Info.MICROPHONE,
-            Port.Info.SPEAKER,
-            Port.Info.LINE_IN,
-            Port.Info.LINE_OUT,
-            Port.Info.HEADPHONE,
-            Port.Info.COMPACT_DISC
-        };
+        for (Mixer.Info mixerInfo : AudioSystem.getMixerInfo()) {
+            Mixer mixer = AudioSystem.getMixer(mixerInfo);
 
-        for (Port.Info portInfo : portInfos) {
-            if (AudioSystem.isLineSupported(portInfo)) {
-                portComboBox.addItem(portInfo);
+            // Process ports
+            processLines(mixer.getSourceLineInfo(), mixer, ports); // No isOutput parameter
+            processLines(mixer.getTargetLineInfo(), mixer, ports); // No isOutput parameter
+        }
+
+        if (!ports.isEmpty()) {
+            ports.forEach(portComboBox::addItem);
+            portComboBox.setSelectedIndex(0);
+        } else {
+            controlTextArea.setText("No audio ports found in the system.");
+            playButton.setEnabled(false);
+        }
+    }
+
+    private void processLines(Line.Info[] lines, Mixer mixer, List<PortWrapper> ports) { // Removed isOutput parameter
+        for (Line.Info lineInfo : lines) {
+            if (lineInfo instanceof Port.Info portInfo) {
+                try {
+                    Line testLine = AudioSystem.getMixer(mixer.getMixerInfo()).getLine(portInfo);
+                    if (testLine != null) {
+                        ports.add(new PortWrapper(portInfo, mixer)); // No manual isOutput
+                        testLine.close();
+                    }
+                } catch (LineUnavailableException e) {
+                    Logger.getLogger(PortInfoSwingApp.class.getName())
+                            .log(Level.FINE, "Port unavailable: " + portInfo.getName(), e);
+                }
             }
         }
     }
 
+    private void startPlayback() {
+        Thread playThread = new Thread(() -> {
+            PortWrapper wrapper = (PortWrapper) portComboBox.getSelectedItem();
+            if (wrapper == null || !wrapper.isOutput) {
+                Logger.getLogger(PortInfoSwingApp.class.getName())
+                        .log(Level.WARNING, "Invalid port selected for playback");
+                return;
+            }
+
+            try {
+                line = (SourceDataLine) AudioSystem.getMixer(wrapper.mixer.getMixerInfo()).getLine(wrapper.portInfo);
+                line.open(); // Open with the line's default format
+                line.start();
+
+                AudioFormat format = line.getFormat();
+                int sampleRate = (int) format.getSampleRate();
+                int channels = format.getChannels();
+                int sampleSizeInBytes = format.getSampleSizeInBits() / 8;
+                boolean isBigEndian = format.isBigEndian();
+
+                isPlaying = true;
+                int bufferSize = 4096;
+                byte[] buffer = new byte[bufferSize * channels * sampleSizeInBytes];
+                double angle = 0;
+                double frequency = 440; // A4 note
+
+                while (isPlaying) {
+                    for (int i = 0; i < buffer.length;) {
+                        double sine = Math.sin(angle);
+                        angle += 2 * Math.PI * frequency / sampleRate;
+                        if (angle > 2 * Math.PI) {
+                            angle -= 2 * Math.PI;
+                        }
+                        int sample = (int) (sine * 32767); // 16-bit range
+
+                        // Write sample to all channels
+                        for (int c = 0; c < channels; c++) {
+                            if (sampleSizeInBytes == 2) {
+                                if (isBigEndian) {
+                                    buffer[i++] = (byte) (sample >>> 8);
+                                    buffer[i++] = (byte) sample;
+                                } else {
+                                    buffer[i++] = (byte) sample;
+                                    buffer[i++] = (byte) (sample >>> 8);
+                                }
+                            } else {
+                                // Handle other sample sizes (e.g., 8-bit, 24-bit) if necessary
+                                // This example assumes 16-bit for simplicity
+                            }
+                        }
+                    }
+                    line.write(buffer, 0, buffer.length);
+                }
+
+                line.drain();
+                line.stop();
+                line.close();
+            } catch (LineUnavailableException ex) {
+                Logger.getLogger(PortInfoSwingApp.class.getName())
+                        .log(Level.SEVERE, "Error accessing audio line", ex);
+            }
+        });
+        playThread.start();
+    }
+
+    private void updatePlayButtonState(PortWrapper wrapper) {
+        boolean canPlay = wrapper != null && wrapper.isOutput;
+        playButton.setEnabled(canPlay);
+        playButton.setToolTipText(canPlay
+                ? "Play test tone through this output"
+                : "Test tone not available for input ports");
+    }
+
+    private void stopPlayback() {
+        isPlaying = false;
+        if (line != null) {
+            line.stop();
+            line.close();
+        }
+    }
+
     // Method to display port controls in the text area
-    private void displayPortControls(Port.Info portInfo) {
+    private void displayPortControls(PortWrapper portInfo) {
         controlTextArea.setText(""); // Clear previous text
         try {
-            try (Port port = (Port) AudioSystem.getLine(portInfo)) {
+            try (Port port = (Port) AudioSystem.getMixer(portInfo.mixer.getMixerInfo()).getLine(portInfo.portInfo)) {
                 port.open();
 
                 controlTextArea.append("Controls for: " + portInfo + "\n\n");
@@ -117,7 +258,7 @@ public class PortInfoSwingApp extends JFrame {
                 for (Control control : port.getControls()) {
                     controlTextArea.append("Control: " + control + "\n");
                 }
-                updateControlsPanel(portInfo);
+                updateControlsPanel(portInfo.portInfo);
             }
         } catch (LineUnavailableException e) {
             controlTextArea.append("Error accessing " + portInfo + ": " + e.getMessage());
