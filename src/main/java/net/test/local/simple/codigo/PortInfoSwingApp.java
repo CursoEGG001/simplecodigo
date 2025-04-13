@@ -90,6 +90,7 @@ public class PortInfoSwingApp extends JFrame {
         setupUI();
         setupListeners();
         populatePorts();
+        pack();
     }
 
     private void setupUI() {
