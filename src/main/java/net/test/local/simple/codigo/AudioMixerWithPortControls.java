@@ -11,7 +11,6 @@ import java.util.stream.StreamSupport;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.CompoundControl;
 import javax.sound.sampled.Control;
-import javax.sound.sampled.Line;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.Mixer;
 import javax.sound.sampled.Port;
@@ -42,7 +41,7 @@ public class AudioMixerWithPortControls {
                 // Optionally, you can open and use the mixer here
                 // For example, open a port and perform some operations
                 try {
-                    try (Port port = (Port) mixer.getLine(new Line.Info(Port.class))) {
+                    try (Port port = (Port) mixer.getLine(Port.Info.SPEAKER)) {
                         port.open();
                         System.out.println("Port opened for mixer: " + mixerInfo.getName());
                         for (Control control : port.getControls()) {

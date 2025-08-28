@@ -1,0 +1,45 @@
+@startuml
+
+actor Entrenador
+participant Entorno
+participant Actor
+participant Crítico
+participant BufferExperiencia
+participant Optimizador
+
+Entrenador -> Entorno : reset()
+Entorno --> Entrenador : estado_inicial (s₀)
+
+loop para cada paso t
+    Entrenador -> Actor : π(a|sₜ; θ)
+    Actor --> Entrenador : acción aₜ
+    Entrenador -> Entorno : ejecutar(aₜ)
+    Entorno --> Entrenador : recompensa rₜ, nuevo_estado sₜ₊₁, done
+    Entrenador -> BufferExperiencia : almacenar(sₜ, aₜ, rₜ, sₜ₊₁, done)
+
+    alt si done
+        Entrenador -> Entorno : reset()
+        Entorno --> Entrenador : nuevo_estado s₀
+    end
+
+    alt cada K pasos
+        Entrenador -> BufferExperiencia : muestrear_lote()
+        BufferExperiencia --> Entrenador : batch(sᵢ, aᵢ, rᵢ, sᵢ₊₁)
+        Entrenador -> Crítico : V(sᵢ; ϕ)
+        Crítico --> Entrenador : valores_predichos
+        Entrenador -> Crítico : V(sᵢ₊₁; ϕ)
+        Crítico --> Entrenador : valores_siguientes
+        Entrenador -> Entrenador : calcular_recompensas_descontadas(Rᵢ = rᵢ + γ*V(sᵢ₊₁))
+        Entrenador -> Entrenador : calcular_ventajas(Aᵢ = Rᵢ - V(sᵢ))
+        Entrenador -> Optimizador : actualizar_Crítico(ϕ, MSE(Rᵢ, V(sᵢ)))
+        Optimizador -> Crítico : aplicar_gradientes(∇ϕ)
+        Entrenador -> Optimizador : actualizar_Actor(θ, Aᵢ * logπ(aᵢ|sᵢ))
+        Optimizador -> Actor : aplicar_gradientes(∇θ)
+
+        alt cada M actualizaciones
+            Entrenador -> Crítico : actualizar_red_objetivo()
+        end
+    end
+end
+
+@enduml
