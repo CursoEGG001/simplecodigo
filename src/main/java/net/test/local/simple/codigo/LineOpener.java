@@ -38,8 +38,6 @@ import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -164,7 +162,6 @@ public class LineOpener extends JFrame {
         initializeUI();
         populateMixers();
         setupEventHandlers();
-        setupShutdownHook();
 
         LOGGER.info("Aplicación LineOpener iniciada correctamente");
     }
@@ -174,7 +171,7 @@ public class LineOpener extends JFrame {
      * propiedades visuales.
      */
     private void initializeUI() {
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
 
         // Panel principal con componentes organizados
@@ -393,23 +390,6 @@ public class LineOpener extends JFrame {
         openButton.addActionListener(e -> openSelectedLine());
         fileButton.addActionListener(e -> selectAudioFile());
 
-        // Window listener para limpieza adecuada
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosing(WindowEvent e) {
-                shutdown();
-            }
-        });
-    }
-
-    /**
-     * Configura el hook de cierre para limpiar recursos al terminar la aplicación.
-     */
-    private void setupShutdownHook() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            LOGGER.info("Cerrando aplicación...");
-            shutdown();
-        }));
     }
 
     /**
@@ -419,11 +399,6 @@ public class LineOpener extends JFrame {
         LineInfoWrapper selectedLineWrapper = (LineInfoWrapper) lineComboBox.getSelectedItem();
         if (selectedLineWrapper == null) {
             showError("No se ha seleccionado ninguna línea");
-            return;
-        }
-
-        if (playing) {
-            stopCurrentOperation();
             return;
         }
 
@@ -519,8 +494,6 @@ public class LineOpener extends JFrame {
             } catch (Exception ex) {
                 LOGGER.log(Level.SEVERE, "Clip error", ex);
                 SwingUtilities.invokeLater(() -> showError("Clip error: " + ex.getMessage()));
-            } finally {
-                cleanup();
             }
         });
     }
@@ -580,8 +553,6 @@ public class LineOpener extends JFrame {
         } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
             LOGGER.log(Level.SEVERE, "Error durante reproducción", e);
             SwingUtilities.invokeLater(() -> showError("Error durante reproducción: " + e.getMessage()));
-        } finally {
-            cleanup();
         }
     }
 
@@ -669,8 +640,6 @@ public class LineOpener extends JFrame {
         } catch (LineUnavailableException | IOException | InterruptedException e) {
             LOGGER.log(Level.SEVERE, "Error durante grabación", e);
             SwingUtilities.invokeLater(() -> showError("Error durante grabación: " + e.getMessage()));
-        } finally {
-            cleanup();
         }
     }
 
@@ -1065,80 +1034,6 @@ public class LineOpener extends JFrame {
         } else if (selectedLine != null && selectedLine.type == LineType.TARGET) {
             updateStatus("Use 'Abrir Línea' para comenzar la grabación");
         }
-    }
-
-    /**
-     * Detiene la operación de audio actual.
-     */
-    private void stopCurrentOperation() {
-        playing = false;
-
-        if (currentAudioTask != null && !currentAudioTask.isDone()) {
-            currentAudioTask.cancel(true);
-        }
-
-        if (currentSourceLine != null) {
-            currentSourceLine.stop();
-            currentSourceLine.close();
-        }
-
-        if (currentTargetLine != null) {
-            currentTargetLine.stop();
-            currentTargetLine.close();
-        }
-
-        cleanup();
-        updateStatus("Operación detenida por el usuario");
-        LOGGER.info("Operación de audio detenida por el usuario");
-    }
-
-    /**
-     * Limpia los recursos utilizados durante las operaciones de audio.
-     */
-    private void cleanup() {
-        playing = false;
-        currentSourceLine = null;
-        currentTargetLine = null;
-        volumeControl = null;
-        currentLevel = 0.0f;
-
-        if (levelUpdateTimer != null && levelUpdateTimer.isRunning()) {
-            levelUpdateTimer.stop();
-        }
-
-        SwingUtilities.invokeLater(() -> {
-            openButton.setText("Abrir Línea");
-            volumeSlider.setEnabled(false);
-            levelMeter.setValue(0);
-            levelMeter.setString("Silencio");
-            levelMeter.setForeground(Color.GREEN);
-        });
-    }
-
-    /**
-     * Realiza el cierre ordenado de la aplicación.
-     */
-    private void shutdown() {
-        LOGGER.info("Iniciando proceso de cierre");
-        stopCurrentOperation();
-
-        if (audioExecutor != null && !audioExecutor.isShutdown()) {
-            audioExecutor.shutdown();
-            try {
-                if (!audioExecutor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
-                    audioExecutor.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                audioExecutor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        if (levelUpdateTimer != null) {
-            levelUpdateTimer.stop();
-        }
-
-        System.exit(0);
     }
 
     /**
